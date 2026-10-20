@@ -1,0 +1,7 @@
+{
+  "name": "second-brain",
+  "author": { "name": "ai-toolkit contributors" },
+  "version": "1.0.0",
+  "description": "A second brain for an Obsidian vault: capture, tag-first search, calendar and email sync, daily briefs, distillation and session continuity.",
+  "keywords": ["obsidian", "second-brain", "memory", "calendar", "email", "tasks", "distill"]
+}

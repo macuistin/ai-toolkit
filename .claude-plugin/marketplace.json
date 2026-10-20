@@ -1,0 +1,14 @@
+{
+  "name": "ai-toolkit",
+  "description": "Claude Code and Cowork plugins, skills, setup guides and scripts for AI-assisted work",
+  "owner": {
+    "name": "ai-toolkit contributors"
+  },
+  "plugins": [
+    {
+      "name": "second-brain",
+      "source": "./plugins/second-brain",
+      "description": "A second brain for an Obsidian vault: capture, tag-first search, calendar and email sync, daily briefs and distillation"
+    }
+  ]
+}

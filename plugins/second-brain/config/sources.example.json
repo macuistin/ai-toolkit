@@ -1,0 +1,24 @@
+{
+  "timezone": "Europe/Dublin",
+  "limits": {
+    "calendarDays": 14,
+    "emailDays": 3
+  },
+  "calendar": {
+    "sources": [
+      { "id": "primary", "label": "Personal calendar" }
+    ],
+    "skipIfAllAttendeesIn": [],
+    "oooKeywords": ["OOO", "out of office", "holiday", "annual leave"]
+  },
+  "email": {
+    "mailboxes": [
+      { "id": "primary", "label": "Personal mailbox" }
+    ],
+    "queries": ["is:unread newer_than:3d"],
+    "watchedSenders": [],
+    "vipSenders": [],
+    "excludeLabels": ["finance", "health", "legal"],
+    "waitingAfterDays": 2
+  }
+}

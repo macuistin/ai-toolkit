@@ -1,0 +1,24 @@
+name: validate
+on:
+  push:
+  pull_request:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JSON files
+        run: |
+          for f in $(git ls-files '*.json'); do python3 -m json.tool "$f" > /dev/null; done
+      - name: Check code fences balance
+        run: |
+          for f in $(git ls-files '*.md'); do
+            c=$(grep -c '^```' "$f" || true)
+            if [ $((c % 2)) -ne 0 ]; then echo "Unbalanced code fence in $f"; exit 1; fi
+          done
+      - name: Public-safety scan
+        env:
+          DENYLIST_TERMS: ${{ secrets.DENYLIST_TERMS }}
+        run: |
+          printf '%s\n' "$DENYLIST_TERMS" > "$RUNNER_TEMP/denylist.txt"
+          DENYLIST_FILE="$RUNNER_TEMP/denylist.txt" tools/check-public.sh
