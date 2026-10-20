@@ -42,6 +42,9 @@ msg_error() { echo -e "${RD}[FAIL]${CL}  $*" >&2; }
 die()       { msg_error "$*"; exit 1; }
 
 LOG_FILE=/var/log/claude-rc-lxc.log
+SCRIPT_URL=https://raw.githubusercontent.com/macuistin/ai-toolkit/main/tools/claude-rc-lxc.sh
+# How to re-run this script in a message: a local file when run as a file, otherwise the URL.
+if [[ -f "$0" ]]; then RUN="bash $0"; else RUN="wget -qO - $SCRIPT_URL | bash -s --"; fi
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "---- $(date '+%F %T') claude-rc-lxc.sh $* ----"
 
@@ -52,7 +55,7 @@ on_err() {
   msg_error "Stopped at line $1: $2"
   if ((CREATED)); then
     msg_warn "Container $CTID was created but setup did not finish."
-    msg_warn "Retry with: bash $0 enable $CTID   (or destroy it: pct stop $CTID; pct destroy $CTID)"
+    msg_warn "Retry with: $RUN enable $CTID   (or destroy it: pct stop $CTID; pct destroy $CTID)"
   fi
 }
 trap on_exit EXIT
@@ -126,7 +129,7 @@ container_exists() { pct status "$1" &>/dev/null; }
 
 validate_inputs() {
   is_int "$CTID" && ((CTID >= 100)) || die "Container ID must be a number of at least 100."
-  container_exists "$CTID" && die "Container $CTID already exists. Use: bash $0 status $CTID"
+  container_exists "$CTID" && die "Container $CTID already exists. Use: $RUN status $CTID"
   [[ "$CT_HOSTNAME" =~ ^[a-z0-9]([a-z0-9-]{0,62})$ ]] || die "Hostname must be lowercase letters, digits and hyphens."
   is_int "$CT_CORES" && ((CT_CORES >= 1)) || die "CPU cores must be a positive number."
   is_int "$CT_RAM_MB" && ((CT_RAM_MB >= 4096)) || die "RAM must be at least 4096 MB (Claude Code needs about 4 GB)."
@@ -299,7 +302,7 @@ ensure_running() {
 }
 
 require_existing() {
-  is_int "$TARGET_CTID" || die "Give a container ID, e.g. bash $0 $MODE 200"
+  is_int "$TARGET_CTID" || die "Give a container ID, e.g. $RUN $MODE 200"
   container_exists "$TARGET_CTID" || die "Container $TARGET_CTID does not exist."
   CTID="$TARGET_CTID"
 }
@@ -388,7 +391,7 @@ do_install() {
   pct start "$CTID"
   pct push "$CTID" "$TMP/rc.env" /root/rc.env --perms 600
   pct exec "$CTID" -- bash -c 'for i in $(seq 60); do getent hosts claude.ai >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1' \
-    || die "Container has no network access. Check the bridge and DHCP, then run: bash $0 enable $CTID"
+    || die "Container has no network access. Check the bridge and DHCP, then run: $RUN enable $CTID"
   msg_ok "Network is up"
 
   msg_info "Installing packages, Claude Code and the Home Assistant MCP server (a few minutes)"
@@ -404,17 +407,13 @@ do_install() {
   echo "  5. Confirm '$RC_NAME' appears in the Claude app (Code tab), press Ctrl+C, then type exit twice."
   echo
 
-  if ((UNATTENDED)); then
-    msg_warn "Unattended mode stops here. After completing the steps above, run:"
-    echo "  bash $0 enable $CTID"
-    exit 2
-  fi
-
-  read -r -p "$(echo -e "${YW}?${CL} Press Enter once you have done this... ")" _
-  msg_info "Enabling the background service"
-  run_phase enable
-  msg_ok "Remote Control runs in the background and restarts after reboots"
-  finish_message
+  # Do not wait here: the first-run steps need a second terminal, so finish now
+  # and start the background service once they are done.
+  msg_warn "Finish the steps above, then start the background service with:"
+  echo "  $RUN enable $CTID"
+  echo
+  msg_info "The service is set to start whenever the container starts."
+  exit 0
 }
 
 finish_message() {
@@ -425,13 +424,14 @@ finish_message() {
   echo "  Claude app > Code tab > '$RC_NAME'"
   echo "  Container IP : ${ip:-unknown}"
   echo "  Shell        : pct enter $CTID"
-  echo "  Status       : bash $0 status $CTID"
-  echo "  Update       : bash $0 update $CTID"
+  echo "  Status       : $RUN status $CTID"
+  echo "  Update       : $RUN update $CTID"
 }
 
 do_enable() {
   require_existing
   ensure_running
+  pct set "$CTID" --onboot 1 >/dev/null
   msg_info "Enabling background service on $CTID"
   run_phase enable
   msg_ok "Remote Control is running in the background"
