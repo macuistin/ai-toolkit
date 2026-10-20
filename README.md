@@ -16,6 +16,7 @@ claude plugin install second-brain@ai-toolkit
 | `plugins/second-brain/` | Second brain plugin for an Obsidian vault: capture, tag-first search, calendar and email sync, daily briefs, distillation |
 | `guides/` | Step-by-step setup guides, such as running Claude Code Remote Control on a Proxmox LXC |
 | `tools/claude-rc-lxc.sh` | Proxmox host script that builds a Debian LXC running Claude Code Remote Control as a background service |
+| `tools/claude-rc-watchdog.sh` | Restarts a Claude Code Remote Control service that hangs on a prompt or login error. Systemd units in `tools/systemd/` |
 | `tools/check-public.sh` | Public-safety scan used before every push |
 
 ## Requirements

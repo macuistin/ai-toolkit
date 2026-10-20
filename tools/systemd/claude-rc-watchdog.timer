@@ -1,0 +1,11 @@
+# Install to ~/.config/systemd/user/claude-rc-watchdog.timer
+[Unit]
+Description=Run the Claude Remote Control watchdog every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=claude-rc-watchdog.service
+
+[Install]
+WantedBy=timers.target
