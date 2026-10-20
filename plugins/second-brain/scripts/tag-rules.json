@@ -1,0 +1,148 @@
+{
+  "_doc": "Rules for _scripts/tagger.py. See Notes/tagging-conventions.md. Owned namespaces are recomputed every run; additive namespaces are only ever added to (so distill/humans can add their own).",
+  "owner_slug": "owner",
+  "owned": [
+    "type",
+    "meeting",
+    "team",
+    "source",
+    "status"
+  ],
+  "additive": [
+    "project",
+    "person",
+    "topic",
+    "channel"
+  ],
+  "skip": [
+    "_scripts/",
+    ".obsidian/",
+    ".trash/",
+    "Untitled"
+  ],
+  "type_by_path": [
+    [
+      "Archive/",
+      "type/archive"
+    ],
+    [
+      "Meetings/README.md",
+      "type/index"
+    ],
+    [
+      "Meetings/",
+      "type/meeting"
+    ],
+    [
+      "Synced/Links/",
+      "type/doc"
+    ],
+    [
+      "Synced/Runs/",
+      "type/log"
+    ],
+    [
+      "Synced/",
+      "type/dashboard"
+    ],
+    [
+      "People/",
+      "type/person"
+    ],
+    [
+      "Projects/",
+      "type/project"
+    ],
+    [
+      "Plans/",
+      "type/plan"
+    ],
+    [
+      "Notes/",
+      "type/note"
+    ]
+  ],
+  "type_by_name": {
+    "index.md": "type/index",
+    "VaultIndex.md": "type/index",
+    "README.md": "type/index",
+    "CLAUDE.md": "type/index",
+    "MEMORY.md": "type/knowledge",
+    "Decisions.md": "type/knowledge",
+    "Learning.md": "type/knowledge",
+    "Goals.md": "type/knowledge",
+    "ActionItems.md": "type/knowledge",
+    "Inbox.md": "type/knowledge",
+    "Dashboard.md": "type/dashboard",
+    "log.md": "type/log",
+    "agent-log.md": "type/log",
+    "SyncLog.md": "type/log",
+    "SkillUsage.md": "type/log",
+    "TrackedChannels.md": "type/tracking",
+    "TrackedDocs.md": "type/tracking",
+    "TrackedLinks.md": "type/tracking"
+  },
+  "type_default": "type/note",
+  "meeting_kind": [
+    [
+      "meeting/1on1",
+      "1on1|1-1|one-on-one"
+    ],
+    [
+      "meeting/postmortem",
+      "postmortem"
+    ],
+    [
+      "meeting/incident",
+      "incident|outage|crashloop"
+    ],
+    [
+      "meeting/standup",
+      "standup|stand-up"
+    ],
+    [
+      "meeting/ops-review",
+      "ops-review"
+    ],
+    [
+      "meeting/sprint",
+      "sprint|retro|backlog|prioriti[sz]ation"
+    ],
+    [
+      "meeting/all-hands",
+      "all-hands|all-team|demo-day|tech-talk|show-and-tell"
+    ],
+    [
+      "meeting/leads",
+      "leads|leadership|tl-sync"
+    ]
+  ],
+  "team": {
+    "switch_date": "1900-01-01",
+    "before": "team/default",
+    "after": "team/default",
+    "usage_keywords": "(?!)"
+  },
+  "projects": {},
+  "project_min_hits": 2,
+  "topics": {
+    "postmortem": "(?i:post-?mortem)",
+    "onboarding": "(?i:onboard)",
+    "decision": "(?i:\\bdecid)",
+    "oncall": "(?i:on-?call)"
+  },
+  "topic_min_hits": 3,
+  "people_extra": {},
+  "people_exclude": [],
+  "people_first_name_in_filename": true,
+  "legacy_map": {
+    "meeting": "type/meeting",
+    "1on1": "meeting/1on1",
+    "recurring": null,
+    "testing": "topic/testing",
+    "acceptance-tests": "topic/acceptance-tests",
+    "standards": "topic/standards"
+  },
+  "legacy_default_ns": "channel",
+  "_doc_topics": "Topic regexes are case-sensitive; wrap case-insensitive parts in (?i:...). A topic is added when the filename matches or the body has >= topic_min_hits matches."
+}

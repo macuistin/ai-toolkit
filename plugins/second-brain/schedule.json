@@ -1,0 +1,7 @@
+{
+  "timezone": "Europe/Dublin",
+  "jobs": [
+    { "id": "sync-calendar", "cron": "50 7,12 * * 1-5", "job": "jobs/sync-calendar.md", "kind": "slow" },
+    { "id": "sync-email", "cron": "30 8,10,12,14,16 * * 1-5", "job": "jobs/sync-email.md", "kind": "fast" }
+  ]
+}
