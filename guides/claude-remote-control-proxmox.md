@@ -20,6 +20,8 @@ Is not Anthropic's separate Team/Enterprise 'self-hosted environments' feature. 
 
 Official references: https://code.claude.com/docs/en/remote-control  |  https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan
 
+Two ways to build the guest. Sections 2 to 8 describe a manual VM. The script `tools/claude-rc-lxc.sh` builds a lighter Debian 12 LXC (2 cores, 4 GB RAM, 16 GB disk by default) and does the install, MCP registration and background service for you. Sections 9 to 12 (GitHub, connecting from the Claude cloud, scheduled tasks, lessons learned) apply to both.
+
 # 2. Recommended design
 
 | **Component** | **Starting configuration** |
@@ -157,7 +159,101 @@ Keep the OS and Claude Code updated, and review logs after testing.
 
 Take a Proxmox backup/snapshot before changing the VM's authentication, service supervision, or MCP configuration.
 
-# 9. Acceptance tests
+# 9. Phase F — GitHub from the guest
+
+Do this as the Claude user, not root. Claude can then clone, branch, push and open draft pull requests from the guest.
+
+Install the tools (the LXC script installs git; `gh` is in the Debian 12 repositories):
+
+sudo apt install -y git gh
+
+Set the identity used for commits. Use a name and the no-reply address GitHub shows under Settings > Emails if you do not want your real address in history.
+
+git config --global user.name "Your Name"
+
+git config --global user.email "ID+username@users.noreply.github.com"
+
+Authenticate with a fine-grained personal access token, limited to the repositories Claude should touch, with Contents and Pull requests set to read and write. Save the token in a file only the Claude user can read, log in from it, then delete the file.
+
+install -m 600 /dev/null ~/gh-token && nano ~/gh-token
+
+gh auth login --with-token < ~/gh-token
+
+shred -u ~/gh-token
+
+gh auth status
+
+Rules that save trouble:
+
+Work on a branch and open a draft pull request. Never push to the default branch.
+
+Before pushing from a shallow clone (git clone --depth 1), fetch the default branch first. Pushing from a stale shallow clone re-uploads the whole tree and can be rejected with HTTP 413.
+
+Run any public-safety scan the repository provides before every push. Keep the term list outside the repository.
+
+Cloud sessions on claude.ai get their own GitHub access through the GitHub connection in your claude.ai settings. That is separate from the token on the guest.
+
+# 10. Connecting to the guest from the Claude cloud
+
+A running Remote Control session shows in the Claude app and at claude.ai/code under the name you gave it (for example Home Server). Behind it is an environment of kind bridge, which is your guest. Sessions in that environment run on the guest, with its files, its network and its local MCP configuration.
+
+Check from any Claude session that has the Claude Code Remote tools: list environments, find the one whose sessions run on the guest, and note its environment ID. Sessions that start from the web or the phone app in other environments run in Anthropic's cloud and cannot see the guest's files.
+
+What the guest must have for cloud-driven work to succeed:
+
+The Remote Control process running and connected (section 6, or the LXC service).
+
+Any scripts and data the task needs, stored under the Claude user's home folder, with secrets in files readable only by that user.
+
+Python 3.9 or later if a script uses it. On Debian, install python3 (the time zone data comes from the tzdata package, which is normally already present; if a script asks for the Python tzdata package, install it with pip in a virtual environment).
+
+A session that is idle is fine. A session that has exited is not: a new Remote Control session is needed.
+
+# 11. Scheduled cloud tasks that run on the guest
+
+Use a scheduled task (called a routine or trigger in some tools) that starts a fresh session on each run in the guest's environment. The fired session is a normal Claude session on the guest, so it can run scripts, read and write files in the Claude user's home, and call read-only tools.
+
+Settings that worked:
+
+New session on each fire, in the bridge environment of the guest. This does not depend on any particular session staying open.
+
+A prompt that is complete on its own. A fresh session has no memory of earlier chats, so name every file path, say what to read first, what it may write, and what to report.
+
+A cron expression with an explicit time zone prefix, for example CRON_TZ=Europe/Dublin 30 8 * * * for 08:30 local time every day. Without the prefix, times are UTC. The service may start a run a few minutes after the stated time.
+
+A manual test run straight after creating it. Then confirm the result on the guest (file modification time, report contents), not only in the chat summary.
+
+Limits seen:
+
+A scheduled task cannot wake or resume one of your other live sessions. The service refuses it unless the target session sets it up itself or you do. A fresh session per run avoids this.
+
+Messages sent from one session to another are treated as data by the receiving session, which will not act on them as instructions. Give the instruction in the session you want to act, or use a scheduled task instead.
+
+Some organisations cannot attach connectors to a scheduled task, so the fired session may have no connector tools. Test what a fired session can reach. If local MCP servers do not load, make the task script-based: let a script on the guest read the data and have Claude analyse the output.
+
+A desktop-app scheduled task (the Claude desktop app's own scheduler) is a different thing. It runs only while the desktop app is open on that machine. If you move a task from one machine to another, disable or delete it on the old one so reports do not run twice.
+
+Read-only tasks: say so at the top of the prompt, list the tools that must never be called, and keep the guest's credentials read-only where the service allows it.
+
+# 12. Lessons learned
+
+Secrets: never paste a URL or token into a chat. If one is pasted, rotate it. Keep secrets in files under ~/.config with mode 600, and have scripts read them from there. Do not print them in logs or reports.
+
+A Home Assistant MCP can be reached two ways: the built-in MCP server integration (a URL plus a bearer token, as the LXC script registers) or an add-on that serves a secret URL path. If a script needs the URL, make it look in environment variables first, then a mode 600 file, then the Claude MCP configuration, and fail with a message that names the file, never the URL.
+
+Check that a script is read-only in code, not only in the prompt. For example, an allow-list of tool names that start with a read prefix.
+
+Run the data collection script first and let Claude read its summary. This keeps token use small and gives a fallback when MCP tools are missing.
+
+One report file per day, named by date, so each run can compare with the last one and a repeat run on the same day is visibly an overwrite. Ask before overwriting a report you did not generate.
+
+Container time zone is usually UTC. Use explicit time zones in scripts and cron.
+
+Do not move files between machines by pasting their contents. Use a zip or scp, then check ownership and modes.
+
+Keep a copy of every prompt used by a scheduled task in a file under version control, with no secrets, so you can review and re-create it.
+
+# 13. Acceptance tests
 
 ☐  VM starts automatically after a Proxmox reboot.
 
@@ -175,7 +271,13 @@ Take a Proxmox backup/snapshot before changing the VM's authentication, service 
 
 ☐  After a VM reboot, the documented recovery procedure successfully starts a new Remote Control session.
 
-# 10. Troubleshooting
+☐  gh auth status succeeds as the Claude user, and a test branch can be pushed and a draft pull request opened.
+
+☐  A scheduled task with a new session per run, fired manually, writes its output file on the guest.
+
+☐  The task's time zone prefix is set and the next run time shown matches your local time.
+
+# 14. Troubleshooting
 
 | **Symptom** | **Check** |
 | --- | --- |
@@ -184,8 +286,14 @@ Take a Proxmox backup/snapshot before changing the VM's authentication, service 
 | Workspace not trusted | Run Claude Code interactively in the intended project directory and accept the trust prompt. |
 | Session disappears | Check whether the local Claude process stopped, the VM rebooted, or the network dropped. Start a new session if needed. |
 | MCP tools do not appear | Validate MCP configuration and server logs; restart Claude Code after changing MCP settings. |
+| Scheduled task refused with a message about resuming another session | Create the task to start a new session on each run instead of targeting an existing session. |
+| Message sent to another session was ignored | Sessions treat messages from other sessions as data. Give the instruction in the target session, or use a scheduled task. |
+| Scheduled task ran but cannot see local files | It started in a cloud environment. Pick the bridge environment of the guest. |
+| Script says the MCP URL is not found | Put it in a mode 600 file under ~/.config, or set the environment variable the script names. Do not paste it into chat. |
+| Push rejected with HTTP 413 | Fetch the default branch into the shallow clone and rebase, then push again. |
+| Run time is an hour out | The cron has no CRON_TZ prefix, or the guest and cron disagree about summer time. Set an explicit zone. |
 
-# 11. Official references
+# 15. Official references
 
 **Claude Code Remote Control: **https://code.claude.com/docs/en/remote-control
 
