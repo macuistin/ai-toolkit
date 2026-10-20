@@ -23,6 +23,7 @@
 #   HA_URL [http://homeassistant.local:8123/mcp_server/sse] HA_TRANSPORT [sse]
 #   HA_TOKEN (required for --default unless --token-file is given)
 #   RC_NAME [Home Server]
+#   GIT_NAME, GIT_EMAIL (optional; set both to configure git commits for the claude user)
 #
 # Log: /var/log/claude-rc-lxc.log
 #
@@ -105,6 +106,8 @@ done
 : "${HA_TRANSPORT:=sse}"
 : "${RC_NAME:=Home Server}"
 : "${HA_TOKEN:=}"
+: "${GIT_NAME:=}"
+: "${GIT_EMAIL:=}"
 
 # ------------------------------------------------------------------------------
 # Prompt helpers
@@ -184,13 +187,26 @@ sysd() {
 case "$PHASE" in
 install)
   log "Updating OS packages"
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
   apt-get update -qq
   apt-get -y -qq full-upgrade
-  apt-get install -y -qq --no-install-recommends curl ca-certificates git tmux >/dev/null
+  apt-get install -y -qq --no-install-recommends curl ca-certificates git tmux python3 tzdata >/dev/null
+  # GitHub CLI is optional: a missing package must not stop the install.
+  apt-get install -y -qq --no-install-recommends gh >/dev/null 2>&1 \
+    || echo "gh (GitHub CLI) is not available from the package list; skipping." >&2
 
   log "Creating the claude user (no sudo)"
   id "$U" >/dev/null 2>&1 || useradd -m -s /bin/bash "$U"
   chmod 750 "$H"
+  # Private folder for secrets such as API URLs. Files inside should be chmod 600.
+  install -d -m 700 -o "$U" -g "$U" "$H/.config"
+
+  if [[ -n "${GIT_NAME:-}" && -n "${GIT_EMAIL:-}" ]]; then
+    log "Setting the git identity"
+    as_claude git config --global user.name "$GIT_NAME"
+    as_claude git config --global user.email "$GIT_EMAIL"
+  fi
 
   log "Installing Claude Code"
   as_claude bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
@@ -274,6 +290,8 @@ status)
   echo "Service:";  sysd is-active claude-rc.service || true
   echo "Version:";  as_claude claude --version || true
   echo "MCP:";      as_claude bash -c 'cd "$HOME/homeserver" && claude mcp list' || true
+  echo "GitHub:";   as_claude gh auth status 2>&1 | head -3 || true
+  echo "Python:";   python3 --version || true
   ;;
 
 *)
@@ -383,6 +401,8 @@ do_install() {
     printf 'HA_TRANSPORT=%q\n' "$HA_TRANSPORT"
     printf 'HA_TOKEN=%q\n' "$HA_TOKEN"
     printf 'RC_NAME=%q\n' "$RC_NAME"
+    printf 'GIT_NAME=%q\n' "$GIT_NAME"
+    printf 'GIT_EMAIL=%q\n' "$GIT_EMAIL"
   } > "$TMP/rc.env"
   chmod 600 "$TMP/rc.env"
   unset HA_TOKEN
@@ -405,6 +425,7 @@ do_install() {
   echo "  3. cd ~/homeserver && claude remote-control --name \"$RC_NAME\""
   echo "  4. Answer  y  to 'Trust <directory>?' and  y  to 'Enable Remote Control?'."
   echo "  5. Confirm '$RC_NAME' appears in the Claude app (Code tab), press Ctrl+C, then type exit twice."
+  echo "  Optional: log in to GitHub as the claude user (gh auth login --with-token < token-file); see the guide, section 9."
   echo
 
   # Do not wait here: the first-run steps need a second terminal, so finish now
