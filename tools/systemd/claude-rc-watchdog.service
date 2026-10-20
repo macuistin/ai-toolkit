@@ -1,0 +1,7 @@
+# Install to ~/.config/systemd/user/claude-rc-watchdog.service
+[Unit]
+Description=Check and restart Claude Code Remote Control if unhealthy
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/claude-rc-watchdog.sh
