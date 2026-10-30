@@ -1,0 +1,25 @@
+# Example sudoers drop-in for a read-only Claude user on a Proxmox host.
+#
+# Install on the host, as root, (this file holds no keys or addresses):
+#   install -m 0440 -o root -g root tools/sudoers/claude-readonly.example /etc/sudoers.d/claude-readonly
+#   visudo -c
+#
+# The user (here "claudero") can run only the commands listed, with no password and no shell.
+# In sudoers a command with no arguments allows ANY arguments, and "" allows NONE. So dmesg is
+# pinned to no arguments (dmesg -c would clear the kernel log). Do NOT add shells, editors,
+# package managers, pct/qm with free arguments, or journalctl with a wildcard (--file reads
+# arbitrary files and the pager can start a shell). lsblk and findmnt only read state.
+Cmnd_Alias CLAUDE_RO = \
+    /usr/bin/lsblk, \
+    /usr/bin/findmnt, \
+    /usr/bin/dmesg "", \
+    /usr/sbin/smartctl -H *, \
+    /usr/sbin/smartctl -a *, \
+    /usr/bin/journalctl -b -p warning --no-pager -n 100, \
+    /usr/bin/journalctl -b -k --no-pager -n 200, \
+    /usr/sbin/pct status *, \
+    /usr/sbin/pct list "", \
+    /usr/sbin/pct config *
+
+claudero ALL=(root) NOPASSWD: CLAUDE_RO
+Defaults:claudero !requiretty, secure_path="/usr/sbin:/usr/bin:/sbin:/bin"

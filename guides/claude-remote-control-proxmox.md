@@ -20,7 +20,7 @@ Is not Anthropic's separate Team/Enterprise 'self-hosted environments' feature. 
 
 Official references: https://code.claude.com/docs/en/remote-control  |  https://support.claude.com/en/articles/11145838-use-claude-code-with-your-pro-or-max-plan
 
-Two ways to build the guest. Sections 2 to 8 describe a manual VM. The script `tools/claude-rc-lxc.sh` builds a lighter Debian 12 LXC (2 cores, 4 GB RAM, 16 GB disk by default) and does the install, MCP registration and background service for you. Sections 9 to 12 (GitHub, connecting from the Claude cloud, scheduled tasks, lessons learned) apply to both.
+Two ways to build the guest. Sections 2 to 8 describe a manual VM. The script `tools/claude-rc-lxc.sh` builds a lighter Debian 12 LXC (2 cores, 4 GB RAM, 16 GB disk by default) and does the install, MCP registration and background service for you. Sections 9 to 14 (GitHub, connecting from the Claude cloud, scheduled tasks, lessons learned, host storage, read-only host access) apply to both.
 
 # 2. Recommended design
 
@@ -247,13 +247,71 @@ Run the data collection script first and let Claude read its summary. This keeps
 
 One report file per day, named by date, so each run can compare with the last one and a repeat run on the same day is visibly an overwrite. Ask before overwriting a report you did not generate.
 
+A container that bind-mounts a host drive must be restarted after the drive is remounted. Check the host with findmnt before blaming the container.
+
+Prefer read-only diagnostics (lsblk, findmnt, dmesg, smartctl, journalctl) before any change, and keep host changes with you.
+
 Container time zone is usually UTC. Use explicit time zones in scripts and cron.
 
 Do not move files between machines by pasting their contents. Use a zip or scp, then check ownership and modes.
 
 Keep a copy of every prompt used by a scheduled task in a file under version control, with no secrets, so you can review and re-create it.
 
-# 13. Acceptance tests
+# 13. Host storage: an external NTFS drive
+
+Containers see a host folder only through a bind mount, and a bind mount shows whatever is at that path on the host at that moment. If the drive is not mounted on the host, the container sees an empty folder and nothing reports an error. The example below uses a 12 TB NTFS drive at /mnt/wd12.
+
+Order of work:
+
+Mount the drive on the host first. Containers cannot mount NTFS themselves.
+
+Check on the host that it really is mounted (this prints nothing and exits 1 if it is not):
+
+findmnt --mountpoint /mnt/wd12
+
+Then bind-mount it into the container, read-only unless the container must write:
+
+pct set CTID --mp0 /mnt/wd12,mp=/mnt/wd12,ro=1
+
+(The LXC script does this for you when BIND_HOST_PATH and BIND_CT_PATH are set, and refuses to continue if the host path is not a mount point.)
+
+After any remount of the drive on the host (reboot, unplug, fix after an error), restart every container that bind-mounts it, for example pct reboot CTID. A container started before the remount keeps looking at the old, empty folder or a stale mount.
+
+Run `pct config CTID` or `tools/pve-diag.sh ct CTID` to list a container's bind mounts and see whether each host path is mounted.
+
+NTFS ownership is set at mount time (uid, gid and umask options), not with chown. In an unprivileged container, host user IDs are shifted by 100000, so files owned by host root appear as nobody. Mount read-only for the container where you can, and set the mount options on the host to give the mapped user access.
+
+# 14. Read-only access to the Proxmox host
+
+Claude can diagnose the host without being able to change it. Use a dedicated host user, here called claudero, with key-only SSH and a sudoers file that allows a short list of read-only commands.
+
+Diagnostics that are safe to allow: lsblk, findmnt, dmesg, smartctl (health and attributes only), journalctl with fixed arguments, and pct status, list and config. Do not allow shells, editors, package managers, mount, umount, pct start or stop, or journalctl with a wildcard.
+
+Set up, on the host, as root:
+
+adduser --disabled-password --gecos "" claudero
+
+install -d -m 700 -o claudero -g claudero /home/claudero/.ssh
+
+Put the public key of the Claude guest in /home/claudero/.ssh/authorized_keys (mode 600, owned by claudero). The private key stays on the guest in the Claude user's ~/.ssh, mode 600. Generate it there; never paste a private key into chat.
+
+Install the sudoers example and validate it:
+
+install -m 0440 -o root -g root tools/sudoers/claude-readonly.example /etc/sudoers.d/claude-readonly
+
+visudo -c
+
+In sshd_config, add a Match block for the user so it cannot forward ports or use a password: PasswordAuthentication no, AllowTcpForwarding no, X11Forwarding no. Reload sshd and test from the guest before closing your existing session.
+
+Rules for what goes in the repository and in chat:
+
+Commit the sudoers example, the scripts and this guide. Do not commit host addresses, host names, key material, or the authorized_keys file. Keep the host address in ~/.ssh/config on the guest, not in a script or prompt.
+
+Claude must not run commands on the host unless you have said so for that task. When it has no host access, it gives you the read-only commands to run and reads the output you paste back.
+
+Test that the restriction works: from the guest, `ssh claudero@HOST sudo findmnt` should succeed and `ssh claudero@HOST sudo mount -a` should be refused. Use tools/pve-diag.sh for a one-shot overview.
+
+# 15. Acceptance tests
 
 ☐  VM starts automatically after a Proxmox reboot.
 
@@ -271,13 +329,17 @@ Keep a copy of every prompt used by a scheduled task in a file under version con
 
 ☐  After a VM reboot, the documented recovery procedure successfully starts a new Remote Control session.
 
+☐  If a drive is bind-mounted: findmnt on the host shows it, the container lists its files, and they are still there after the container restarts.
+
+☐  The read-only host user can run lsblk and findmnt through sudo, and is refused for mount.
+
 ☐  gh auth status succeeds as the Claude user, and a test branch can be pushed and a draft pull request opened.
 
 ☐  A scheduled task with a new session per run, fired manually, writes its output file on the guest.
 
 ☐  The task's time zone prefix is set and the next run time shown matches your local time.
 
-# 14. Troubleshooting
+# 16. Troubleshooting
 
 | **Symptom** | **Check** |
 | --- | --- |
@@ -291,9 +353,12 @@ Keep a copy of every prompt used by a scheduled task in a file under version con
 | Scheduled task ran but cannot see local files | It started in a cloud environment. Pick the bridge environment of the guest. |
 | Script says the MCP URL is not found | Put it in a mode 600 file under ~/.config, or set the environment variable the script names. Do not paste it into chat. |
 | Push rejected with HTTP 413 | Fetch the default branch into the shallow clone and rebase, then push again. |
+| Container shows an empty folder where the drive should be | The drive is not mounted on the host, or was remounted after the container started. Run findmnt --mountpoint PATH on the host, mount it, then pct reboot CTID. |
+| Files on the drive are owned by nobody | Unprivileged container ID shift. Set uid, gid and umask in the host mount options. |
+| sudo asks for a password or refuses a diagnostic command | The command or its arguments are not in the sudoers file. Check with sudo -l as that user and add only a read-only form. |
 | Run time is an hour out | The cron has no CRON_TZ prefix, or the guest and cron disagree about summer time. Set an explicit zone. |
 
-# 15. Official references
+# 17. Official references
 
 **Claude Code Remote Control: **https://code.claude.com/docs/en/remote-control
 
