@@ -17,6 +17,9 @@ claude plugin install second-brain@ai-toolkit
 | `guides/` | Step-by-step setup guides, such as running Claude Code Remote Control on a Proxmox LXC |
 | `tools/claude-rc-lxc.sh` | Proxmox host script that builds a Debian LXC running Claude Code Remote Control as a background service |
 | `tools/claude-rc-watchdog.sh` | Restarts a Claude Code Remote Control service that hangs on a prompt or login error. Systemd units in `tools/systemd/` |
+| `guides/proxmox-mcp.md` | Gives the Claude LXC read-only access to a Proxmox node through an MCP server, with a note on where every command runs |
+| `tools/proxmox-mcp-host-setup.sh` | Proxmox host script that creates a read-only API token and protects the Claude LXC |
+| `tools/proxmox-mcp-lxc-install.sh` | Claude LXC script that installs ProxmoxMCP-Plus pinned, stores the token with mode 600 and registers it with Claude Code |
 | `tools/check-public.sh` | Public-safety scan used before every push |
 
 ## Requirements
