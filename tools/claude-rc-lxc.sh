@@ -24,6 +24,9 @@
 #   HA_TOKEN (required for --default unless --token-file is given)
 #   RC_NAME [Home Server]
 #   GIT_NAME, GIT_EMAIL (optional; set both to configure git commits for the claude user)
+#   BIND_HOST_PATH, BIND_CT_PATH (optional; bind-mount a host folder, read-only, into the container.
+#       The host path must already be a mount point: see the storage section of the guide.)
+#   BIND_RW [0]  set to 1 to mount it read-write
 #
 # Log: /var/log/claude-rc-lxc.log
 #
@@ -108,6 +111,9 @@ done
 : "${HA_TOKEN:=}"
 : "${GIT_NAME:=}"
 : "${GIT_EMAIL:=}"
+: "${BIND_HOST_PATH:=}"
+: "${BIND_CT_PATH:=}"
+: "${BIND_RW:=0}"
 
 # ------------------------------------------------------------------------------
 # Prompt helpers
@@ -143,6 +149,12 @@ validate_inputs() {
   [[ "$HA_URL" =~ ^https?:// ]] || die "Home Assistant MCP URL must start with http:// or https://."
   [[ "$HA_TRANSPORT" == "sse" || "$HA_TRANSPORT" == "http" ]] || die "HA_TRANSPORT must be 'sse' or 'http'."
   [[ "$RC_NAME" =~ ^[A-Za-z0-9._\ -]{1,64}$ ]] || die "Remote Control name may use letters, digits, spaces, '.', '_' and '-' (max 64)."
+  if [[ -n "$BIND_HOST_PATH$BIND_CT_PATH" ]]; then
+    [[ "$BIND_HOST_PATH" == /* && "$BIND_CT_PATH" == /* ]] || die "BIND_HOST_PATH and BIND_CT_PATH must both be absolute paths."
+    # A bind mount of an unmounted drive silently shows an empty folder, so refuse to continue.
+    findmnt --mountpoint "$BIND_HOST_PATH" >/dev/null \
+      || die "$BIND_HOST_PATH is not a mount point on the host. Mount the drive first (check with: findmnt $BIND_HOST_PATH)."
+  fi
   [[ -n "$HA_TOKEN" ]] || die "No Home Assistant token. Set HA_TOKEN or pass --token-file."
 }
 
@@ -394,6 +406,12 @@ do_install() {
     --ostype debian
   CREATED=1
   msg_ok "Container $CTID created"
+
+  if [[ -n "$BIND_HOST_PATH" ]]; then
+    pct set "$CTID" --mp0 "${BIND_HOST_PATH},mp=${BIND_CT_PATH},ro=$((1 - BIND_RW))"
+    msg_ok "Bind mount ${BIND_HOST_PATH} -> ${BIND_CT_PATH} ($( ((BIND_RW)) && echo read-write || echo read-only ))"
+    msg_warn "After any remount of ${BIND_HOST_PATH} on the host, restart the container: pct reboot $CTID"
+  fi
 
   # Stage the token and run the install phase.
   {
